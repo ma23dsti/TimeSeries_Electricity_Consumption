@@ -34,8 +34,8 @@ Load data and have a first look on them.
 
 #library(forecast)
 library(readxl)
-#library(xts)
-#library(randomForest)
+library(xts)
+library(randomForest)
 ```
 
 ```{r}
