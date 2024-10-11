@@ -21,11 +21,15 @@ jobs:
       with:
         r-version: '4.0.5'
 
-    - name: Install dependencies
+    - name: Install pandoc
       run: |
-        Rscript -e 'install.packages(c("rmarkdown", "tidyverse"))'
+        sudo apt-get install -y pandoc
 
-    - name: Run RMarkdown Script
+    - name: Install required R packages
+      run: |
+        Rscript -e "install.packages(c('rmarkdown'), repos='http://cran.rstudio.com/')"
+
+    - name: Render RMarkdown document
       run: |
         Rscript -e "rmarkdown::render('TimeSeries_script.rmd')"
 
