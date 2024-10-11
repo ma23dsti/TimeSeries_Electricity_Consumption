@@ -32,10 +32,10 @@ Load data and have a first look on them.
 #install.packages("xts")
 #install.packages("randomForest")
 
-library(forecast)
-library(readxl)
-library(xts)
-library(randomForest)
+#library(forecast)
+#library(readxl)
+#library(xts)
+#library(randomForest)
 ```
 
 ```{r}
