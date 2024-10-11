@@ -27,10 +27,10 @@ We will proceed as displayed below
 Load data and have a first look on them.
 
 ```{r, results='hide'}
-install.packages("forecast")
-install.packages("readxl")
-install.packages("xts")
-install.packages("randomForest")
+#install.packages("forecast")
+#install.packages("readxl")
+#install.packages("xts")
+#install.packages("randomForest")
 
 library(forecast)
 library(readxl)
