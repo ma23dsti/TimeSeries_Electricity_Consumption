@@ -33,7 +33,7 @@ Load data and have a first look on them.
 #install.packages("randomForest")
 
 #library(forecast)
-#library(readxl)
+library(readxl)
 #library(xts)
 #library(randomForest)
 ```
