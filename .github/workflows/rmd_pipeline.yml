@@ -31,7 +31,7 @@ jobs:
 
     - name: Render RMarkdown document
       run: |
-        Rscript -e "rmarkdown::render('../TimeSeries_script.Rmd')"
+        Rscript -e "rmarkdown::render('TimeSeries_script.Rmd')"
 
     - name: Upload pdf output
       uses: actions/upload-artifact@v3
