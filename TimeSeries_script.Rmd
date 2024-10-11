@@ -1,0 +1,732 @@
+---
+title: "Time Series"
+date: "2024-10-11"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+We would like to forecast electricity consumption (kW) for 2/21/2010 for one building by taking into account or not the outdoor air temperature.
+
+An Excel file containing electricity consumption (kW) and outdoor air temperature for one building has been provided. These quantities are measured every 15 minutes, from 1/1/2010 1:15 to 2/20/2010 23:45. In addition, outdoor air temperature are available for 2/21/2010.
+
+We will proceed as displayed below
+1. Forecast without using outdoor temperature,
+2. Forecast by using outdoor temperature
+
+
+
+# Install and load packages
+
+Load data and have a first look on them.
+
+```{r, results='hide'}
+install.packages("forecast")
+install.packages("readxl")
+install.packages("xts")
+install.packages("randomForest")
+
+library(forecast)
+library(readxl)
+library(xts)
+library(randomForest)
+```
+
+```{r}
+data <- read_excel("../2023-11-Elec-train.xlsx", sheet = 1, col_types = c("text", "numeric", "numeric"))
+head(data)
+```
+
+There is on data with a different format. Let's update it.
+
+```{r}
+data$Timestamp[data$Timestamp == "40179.052083333336"] <- "1/1/2010 1:15"
+# Check the update
+head(data)
+```
+
+Update the format of the dates to Timestamp.
+
+```{r}
+data$Timestamp <- as.POSIXct(data$Timestamp, format = "%m/%d/%Y %H:%M")
+# View the parsed data
+head(data)
+```
+
+Have another and wider look at the data.
+
+```{r}
+summary(data)
+```
+
+There are some 0. Maybe a power cut. It looks exceptional. Let's replace them (with a small value comparing to the others) to avoid issues later on (e.g. in estimation).
+
+```{r}
+data$"Power (kW)"[data$"Power (kW)" == 0] <- 12
+#Check the update.
+summary(data)
+```
+
+```{r}
+# Create a sequence of time stamps every 15 minutes
+start_time <- as.POSIXct("2010-01-01 01:15")
+end_time <- as.POSIXct("2010-02-21 23:45")
+time_index <- seq(from = start_time, to = end_time, by = "15 min")
+# Observations
+observations <- data[,-1]
+xts_data <- xts(observations, order.by = time_index)
+#Check the structure
+str(xts_data)
+```
+
+Let's have a look of the data on a graph.
+
+```{r, results='hide'}
+autoplot(xts_data)
+```
+
+```{r}
+plot(xts_data, , main = "Time Series")
+```
+
+We can see the two Time Series Power (kW) and Temp (C°).
+
+We do not have the last Power (kW). Let's focus on this Time Series separately first.
+The lowest pic should be due to the 0 (replaced by a low value). Maybe a power cut in the building.
+We can note that there are some higher pics around the fifteen of February, the first and the 12th of January. It is not easy to know if it is a recurrent pattern with this size of dataset. The fact that there are more such highest pics at the recent dates may have an increase impact on some forecast methods like Holt Winter where more weights are on recent data.
+We can see that the most recent pics are more like the ones before these high pics.
+
+# Forecast electricity consumption (kW) for 2/21/2010 by using electricity consumption but not outdoor temperature time series.
+
+Create Power (KW) set of specific working variables.
+
+```{r, results='hide'}
+observationsPower <- observations[1:(nrow(observations) - 96),1]
+end_timePower <- as.POSIXct("2010-02-20 23:45")
+time_indexPower <- seq(from = start_time, to = end_timePower, by = "15 min")
+xts_dataPower <- xts(observationsPower, order.by = time_indexPower)
+head(xts_dataPower)
+#Plot the TS
+plot(xts_dataPower)
+```
+
+##Split the dataset into train and test datasets.
+##Preparation for time series objects.
+
+```{r, results='hide'}
+observationsPower_train <- observations[1:(nrow(observations) - 96*2),1]
+end_timePower_train <- as.POSIXct("2010-02-19 23:45")
+
+#One period is missing / to forecast for Power (kw)
+observationsPower_test <- observations[(nrow(observations) - 96*2 + 1):(nrow(observations)- 96),1]
+start_timePower_test = end_timePower + (- 96 + 1)*60*15
+
+time_indexPower_train <- seq(from = start_time, to = end_timePower_train, by = "15 min")
+xts_dataPower_train <- xts(observationsPower_train, order.by = time_indexPower_train)
+
+time_indexPower_test <- seq(from = start_timePower_test, to = end_timePower, by = "15 min")
+xts_dataPower_test <- xts(observationsPower_test, order.by = time_indexPower_test)
+```
+
+```{r}
+#Plot the TS
+plot(xts_dataPower)
+plot(xts_dataPower_train,col=2)
+plot(xts_dataPower_test,lty=2)
+```
+
+Convert xts to ts objects.
+
+```{r}
+frequency = 24*60/15
+
+ts=ts(coredata(xts_data[,1]),start=c(2010,5),frequency=frequency)
+
+ts_Power=ts(coredata(xts_dataPower),start=c(2010,5),frequency=frequency)
+
+ts_Power_train=ts(coredata(xts_dataPower_train),start=c(2010,5),frequency=frequency)
+ts_Power_test=ts(coredata(xts_dataPower_test),start=c(2010,5+(nrow(observations)- frequency*2)),frequency=frequency)
+
+autoplot (ts_Power_test, series = "ts_Power", lty=2)+
+  autolayer (ts_Power_train, series = "ts_Power_train")
+```
+
+Let's start to decompose the components of the Power Time Series.
+It seems that we have a seasonal component.
+
+```{r, results='hide'}
+ggseasonplot(ts, polar=TRUE)
+```
+
+```{r}
+ggseasonplot(ts_Power, polar=TRUE)
+```
+
+With the ACF, we can check that there is also a trend component.
+
+```{r}
+acf(ts_Power)
+```
+
+## FIRST MODELS
+
+Let's start by looking at Holt Winter model with an additive seasonality without damp then (the amplitude of the seasonality does not seem to change).
+
+```{r}
+model_hw <- HoltWinters(ts_Power_train,seasonal="additive")
+prev_hw<-predict(model_hw,n.ahead=frequency)
+plot(ts_Power_test, lty=2)
+lines(prev_hw, col=2, lty=2)
+
+cat('HW :',sqrt(mean((prev_hw-ts_Power_test)^2)), '\n')
+```
+
+We get a similar shape. However some low/high Power are under/over estimated.
+The RMSE is 11.64876.
+
+Let's have a quick look on what we would get on all the dataset.
+
+```{r, results='hide'}
+hw_model <- HoltWinters(ts_Power,seasonal="additive")
+prev<-predict(hw_model,n.ahead=frequency)
+plot(ts, lty=2)
+lines(prev,col=2)
+```
+
+We may have a specific RMSE.
+By cross validating it is indeed a bit worse (14.84217 instead of 11.64876) but should be more reliable.
+
+```{r}
+# Implementation of cross validation
+
+#We extract the final test set training and test set_
+start_train = c(2010,5)
+end_train = c(2010,5+(nrow(observationsPower_train)))
+start_Power_test = c(2010,5+(nrow(observationsPower_train))+1)
+end_Power_test = c(2010,5+(nrow(observationsPower_train))+1+96)
+ts_Power_train_cv=window(ts_Power,start=start_train, end=end_train)
+ts_Power_test_temp=window(ts_Power,start=start_Power_test, end=end_Power_test)
+
+
+#We will now forecast one day using all the previous observations
+forecasting_1=NULL
+forecasting_2=NULL
+
+nb_iter=10
+for (step in 0:(nb_iter-1)){
+    start_train = c(2010,5)
+    end_train = c(2010,5+(nrow(observationsPower_train)-96*step))
+    ts_Power_train_cv=window(ts_Power,start=start_train, end=end_train)
+    model_hw_cv <- HoltWinters(ts_Power_train_cv,seasonal="additive")
+    forecasting_1=c(predict(model_hw_cv,n.ahead=96),forecasting_1)
+}
+
+f_true = window(ts_Power,start=c(2010,5+(nrow(observationsPower_train)-frequency*step)), end=c(2010,5+(nrow(observationsPower_train)-96*step)+nb_iter*frequency-1))
+
+f1=ts(forecasting_1,start=end_train,frequency = 96)
+autoplot (ts_Power, series = "ts_Power", lty=2, col=1) + autolayer (f1)
+```
+
+```{r}
+cat('RMSE for additive HW without damping:',100*mean(abs(forecasting_1-f_true)/f_true),'\n')
+```
+
+## SARIMA
+
+### SARIMA Auto
+
+Le's have a look at other, more elaborate models like SARIMA.
+
+First, the auto ARIMA.
+
+```{r}
+model_arima_auto = auto.arima (ts_Power_train)
+summary(model_arima_auto)
+```
+
+ARIMA(5,0,1)(0,1,0)[96] is suggested. ar5 and ma1 are over the interval of 2*se => significant. The RMSE is better than HW (11.57332 instead of 14.84217).
+
+Let's cross validate to check the reliability.
+
+```{r}
+# CV
+
+#We extract the final test set training and test set_
+start_train = c(2010,5)
+end_train = c(2010,5+(nrow(observationsPower_train)))
+start_Power_test = c(2010,5+(nrow(observationsPower_train))+1)
+end_Power_test = c(2010,5+(nrow(observationsPower_train))+1+96)
+ts_Power_train_cv=window(ts_Power,start=start_train, end=end_train)
+ts_Power_test_temp=window(ts_Power,start=start_Power_test, end=end_Power_test)
+
+#We will now forecast one day using all the previous observations
+forecasting_1=NULL
+forecasting_SARIMA_auto=NULL
+
+nb_iter=5
+for (step in 0:(nb_iter-1)){
+    start_train = c(2010,5)
+    end_train = c(2010,5+(nrow(observationsPower_train)-frequency*step))
+    ts_Power_train_cv=window(ts_Power,start=start_train, end=end_train)
+    
+    model_hw_cv <- HoltWinters(ts_Power_train_cv,seasonal="additive")
+    model_SARIMA_auto_cv <- auto.arima (ts_Power_train_cv)
+    
+    forecasting_1=c(predict(model_hw_cv,n.ahead=frequency),forecasting_1)
+    forecasting_SARIMA_auto=c(predict(model_SARIMA_auto_cv,n.ahead=frequency)$pred,forecasting_SARIMA_auto)
+    
+}
+
+f_true = window(ts_Power,start=c(2010,5+(nrow(observationsPower_train)-frequency*step)), end=c(2010,5+(nrow(observationsPower_train)-96*step)+nb_iter*frequency-1))
+```
+
+SARIMA auto seems worst now and both have a worse RMSE.
+
+```{r}
+cat('RMSE for additive HW without damping:',100*mean(abs(forecasting_1-f_true)/f_true),'\n')
+cat('RMSE for SARIMA auto:',100*mean(abs(forecasting_SARIMA_auto-f_true)/f_true),'\n')
+```
+
+By looking at the SARIMA auto residuals, we can see that we do not get a white noise and it looks like there is still a SMA1 to consider as well (PACF exponential decrease and ACF pic at 96).
+
+```{r}
+model_arima_auto %>% residuals() %>% ggtsdisplay()
+```
+
+## SARIMA Manual
+
+Let's see if we can do better manually.
+
+We have already noted that we have a season. We can also see it in the ACF. Let's differentiate to remove it.
+
+```{r}
+ggtsdisplay (ts_Power_train)
+ggtsdisplay (ts_Power_train %>% diff(lag=96))
+```
+
+We can see a SMA1 (PACF exponential decrease and a pic in ACF at 96)
+
+We still have several pics but it does not seem to be a seasonal effect.
+
+```{r}
+ggseasonplot((ts_Power_train %>% diff(lag=96)))
+```
+
+```{r}
+acf(ts_Power_train %>% diff(lag=96), lag.max=frequency)
+
+acf(ts_Power_train %>% diff(lag=96), lag.max=frequency*2)
+```
+
+Let's try a SARIMA (0,0,12) (0,1,1) then, as we can also see significant autocorrelations at the beginning of the ACF (MA12).
+
+```{r}
+#Warning : takes time to run due to the model complexity.
+model_arima_man=Arima(ts_Power_train, order=c(0,0,12), seasonal=c(0,1,1))
+model_arima_man %>% residuals() %>% ggtsdisplay()
+```
+
+```{r}
+summary(model_arima_man)
+```
+
+ma12 coeff does not seem to be significant. ma11, sma1 yes.
+
+We still get several significant autocorrelations and a pic at 96. 96 looks very high to try to add a MA96 or a AR96 (model complexity/running time).
+
+Let's look at the RMSE
+
+```{r}
+prev_SARIMA_man=forecast(model_arima_man,h=frequency)
+cat('SARIMA manual :',sqrt(mean((prev_SARIMA_man$mean-ts_Power_test)^2)), '\n')
+```
+
+We get 12.63427 which is better than SARIMA auto. However we could cross validate to check the reliability.
+
+We could also look at Cox-Box (lambda="auto") as the series seems to have a slightly higher amplitude at the end but we will stop there to look at other models.
+
+## Neural Network
+
+```{r}
+model_nnetar=nnetar(ts_Power_train, lambda="auto")
+print(model_nnetar)
+```
+
+25 lagged values 1 lagged values from the same season 1 hidden layer with 14 neurons
+
+Let's having an overview with all previous models.
+
+```{r}
+model_hw <- HoltWinters(ts_Power_train,seasonal="additive")
+
+plot(ts_Power_test, lty=2)
+
+lines(prev_hw, col=2, lty=2)
+cat('HW :',sqrt(mean((prev_hw-ts_Power_test)^2)), '\n')
+
+prev_SARIMA_auto=forecast(model_arima_auto,h=frequency)
+lines(prev_SARIMA_auto$mean, col=3, lty=2)
+cat('SARIMA auto :',sqrt(mean((prev_SARIMA_auto$mean-ts_Power_test)^2)), '\n')
+
+prev_SARIMA_man=forecast(model_arima_man,h=frequency)
+lines(prev_SARIMA_man$mean, col=4, lty=2)
+cat('SARIMA manual :',sqrt(mean((prev_SARIMA_man$mean-ts_Power_test)^2)), '\n')
+
+prev_NN=forecast(model_nnetar,h=frequency)
+lines(prev_NN$mean, col=5, lty=2)
+cat('NN :',sqrt(mean((prev_NN$mean-ts_Power_test)^2)), '\n')
+
+legend('topleft', co=1:5,lty=1, legend=c('true', 'forecast with HW', 'SARIMA auto', 'SARIMA manual', 'NN'))
+```
+
+NN has an higher RMSE and does not perform better than the others. The highest pic is also a bit delayed. Indeed we did not introduce any parametric modeling of the periodicity. We did it in HW for example. In NN we just made the link to the "near" covariates.
+
+SARIMA auto gets the lowest RMSE and is the closest to the true. However after cross validation additive HW was better.
+
+Saying that, we should also cross validate the ones we did not (SARIMA manual & NN). It would take a long time due to the compexity of the models but the results will be more reliable.
+
+To end this first part : if we had only the Power consumption time series, we would have taken the best model (HW additive after cross validation here) and applied it to the all time series for the prediction.
+
+```{r, results='hide'}
+#summary(model_hw)
+#summary(model_arima_auto)
+#summary(prev_SARIMA_man)
+#summary(model_nnetar)
+
+model_hw_1TS_final <- HoltWinters(ts_Power,seasonal="additive")
+prev_hw_1TS_final<-predict(model_hw_1TS_final,n.ahead=frequency)
+plot(prev_hw_1TS_final, main = "electricity consumption (kW) for 2/21/2010 if we have only electricity consumption time series")
+```
+
+```{r}
+summary(model_hw_1TS_final)
+model_hw_1TS_final %>% residuals() %>% ggtsdisplay()
+```
+
+We could hope to get a better situation by taking into account the covariate (outdoor temperature)
+
+Forecast with the best model without using covariates (model HW additive)
+
+
+
+```{r}
+#Fit the model on all the Power data time series
+
+model_hw_without_cov_final <- HoltWinters(ts_Power,seasonal="additive")
+```
+
+```{r}
+prev_hw_without_cov_final<-predict(model_hw_without_cov_final,n.ahead=frequency)
+plot(prev_hw_without_cov_final, lty=2)
+```
+
+# Forecast electricity consumption (kW) for 2/21/2010 by using electricity consumption and outdoor temperature time series.
+
+Let's prepare and have a look at the electricity Time Series.
+
+```{r, results='hide'}
+observationsTemp <- observations[1:(nrow(observations)),2]
+end_timeTemp <- end_time
+end_timeTemp_valid = end_Power_test
+start_timeTemp_trainValid = start_time
+end_timeTemp_trainValid = end_timePower
+end_timeTemp_train = end_timePower_train
+start_timeTemp_valid = start_timePower_test
+end_timeTemp_valid = end_timePower
+
+observationsPower <- observations[1:(nrow(observations) - 96),1]
+end_timePower <- as.POSIXct("2010-02-20 23:45")
+time_indexPower <- seq(from = start_time, to = end_timePower, by = "15 min")
+
+time_indexTemp <- seq(from = start_time, to = end_timeTemp, by = "15 min")
+xts_dataTemp <- xts(observationsTemp, order.by = time_indexTemp)
+head(xts_dataTemp)
+#Plot the TS
+autoplot(xts_dataTemp)
+```
+
+Split the Temperature time series in 4 parts: -trainValid -train -valid -test
+
+```{r}
+observationsTemp_trainValid <- observations[1:(nrow(observations) - frequency),2]
+observationsTemp_valid <- observations[(nrow(observations) - frequency*2 + 1):(nrow(observations)- frequency),2]
+observationsTemp_train <- observations[1:(nrow(observations) - frequency*2),2]
+
+observationsTemp_test <- observations[(nrow(observations) - frequency + 1):(nrow(observations)),2]
+start_timeTemp_test = end_timeTemp + (- 96 + 1)*60*15
+
+time_indexTemp_trainValid <- seq(from = start_time, to = end_timeTemp_trainValid, by = "15 min")
+xts_dataTemp_trainValid <- xts(observationsTemp_trainValid, order.by = time_indexTemp_trainValid)
+
+time_indexTemp_valid <- seq(from = start_timeTemp_valid, to = end_timeTemp_valid, by = "15 min")
+xts_dataTemp_valid <- xts(observationsTemp_valid, order.by = time_indexTemp_valid)
+
+time_indexTemp_train <- seq(from = start_time, to = end_timeTemp_train, by = "15 min")
+xts_dataTemp_train <- xts(observationsTemp_train, order.by = time_indexTemp_train)
+
+time_indexTemp_test <- seq(from = start_timeTemp_test, to = end_timeTemp, by = "15 min")
+xts_dataTemp_test <- xts(observationsTemp_test, order.by = time_indexTemp_test)
+```
+
+```{r}
+#Plot the TS
+plot(xts_dataTemp)
+plot(xts_dataTemp_trainValid)
+plot(xts_dataTemp_train)
+plot(xts_dataTemp_valid)
+plot(xts_dataTemp_test,lty=2)
+```
+
+```{r}
+ts_Temp=ts(coredata(xts_dataTemp),start=c(2010,5),frequency=frequency)
+
+ts_Temp_trainValid=ts(coredata(xts_dataTemp_trainValid),start=c(2010,5),frequency=frequency)
+ts_Temp_train=ts(coredata(xts_dataTemp_train),start=c(2010,5),frequency=frequency)
+ts_Temp_valid=ts(coredata(xts_dataTemp_valid),start=c(2010,5+(nrow(observations)- frequency*2)),frequency=frequency)
+ts_Temp_test=ts(coredata(xts_dataTemp_test),start=c(2010,5+(nrow(observations)- frequency)),frequency=frequency)
+
+autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
+  autolayer (ts_Temp_trainValid, series = "ts_Temp_trainValid")+
+  autolayer (ts_Temp_valid, series = "ts_Temp_valid")
+
+autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
+  autolayer (ts_Temp_valid, series = "ts_Temp_valid")+
+  autolayer (ts_Temp_test, series = "ts_Temp_test")
+```
+
+```{r, results='hide'}
+plot(ts_Temp_trainValid,ts_Power)
+```
+
+By looking at both time series on the same time window, we can see that we may have some dependencies. For example, at the highest temperature : the electricity consumption (kW) are the highest.
+
+There are some outliers which should correspond to the 0 Power (maybe an exceptional cut in the building) that we updated with a low non zero value.
+
+```{r}
+#Plot without the NA
+df <- data.frame(
+  x = data$"Temp (C°)",
+  y = data$"Power (kW)")
+
+df_clean <- df[complete.cases(df), ]
+
+plot(df_clean$x, df_clean$y, main = "Plot (Ignoring NA)", xlab = "Temp (C°)", ylab = "Power (kW)", pch = 19, col = "blue")
+```
+
+We have already studied the forecast without the covariate. Forecasting with covariates.
+
+We will use a dynamic regression model for forecasting electricity consumption , using the outdoor temperature as external covariates. The order of the ARIMA model for the residual part is automaticaly selected
+
+```{r}
+model_arima_auto_cov = auto.arima (ts_Power_train, xreg= ts_Temp_train)
+summary(model_arima_auto_cov)
+```
+
+We get the same model as without covariate : ARIMA(5,0,1)(0,1,0)[96]
+
+ar5 coeff is slightly significant. ma1 is significant.
+
+```{r}
+prev=forecast(model_arima_auto_cov, h=frequency, xreg= ts_Temp_valid)
+autoplot(ts_Power_test)+autolayer(prev$mean)
+cat('SARIMA auto covariates :',sqrt(mean((prev$mean-ts_Power_test)^2)), '\n')
+```
+
+SARIMA auto : 5.908364
+
+Both curves are close. We get the same model(ARIMA(5,0,1)(0,1,0)[96]) as without taking into account the covariate but let's look at the residuals.
+
+```{r}
+model_arima_auto_cov %>% checkresiduals()
+model_arima_auto_cov %>% residuals() %>% ggtsdisplay()
+```
+
+There is still some autocorrelations. We could try by adding a MA96 but the model would become very complex.
+
+Let's see if we can get better result manually.
+
+## Covariate and manual ARIMA
+
+We have only one covariate. Let's look at the accuracy of taking into account trend and season as well.
+
+```{r}
+merged_ts <- cbind(ts_Power_train,ts_Temp_train)
+```
+
+```{r}
+model_TSLM_cov = tslm(ts_Power_train ~ ts_Temp_train,data=merged_ts)
+summary(model_TSLM_cov)
+```
+
+```{r, results='hide'}
+model_TSLM_cov_trendSeason = tslm(ts_Power_train ~ ts_Temp_train+trend+season,data=merged_ts)
+summary(model_TSLM_cov_trendSeason)
+```
+
+Intercept, temperature but indeed also trend and season (especially from 22 to 95) are significant. Around 22-23 would correspond to the start of the "living day" for people (23*15/60) ~ 5,75 hours after 1h15 ~ 7 h at the morning. We the have increase of the power consumption. Similar reasoning ends up with lower consumption during the night (coeff become negatives... but they are not significant).
+
+We have positive significant impact of the outdoor temperature on the power consumption.
+
+Negative significant coeff on the intercept. Maybe due to a slightly decrease that we could see on the general graph.
+
+```{r}
+CV(model_TSLM_cov)
+CV(model_TSLM_cov_trendSeason)
+```
+
+The model with trend and season is way more better (better AdjR2 and lower AIC, AICc, BIC)
+
+```{r}
+checkresiduals(model_TSLM_cov_trendSeason,test='LB',plot=FALSE)
+model_TSLM_cov_trendSeason %>% residuals() %>% ggtsdisplay()
+```
+
+Here the residual are correlated, which means that this regression model (which assumes independent residuals) is not appropriated.
+
+We have significant autocorelation on ACF and PACF. Let's choose the simpler one by using the PACF (looks like AR5).
+
+Let's try an ARIMA (5,0,0) (0,1,0) with covariates. The auto ARIMA had found something close (5,0,1) (0,1,0). The second 1 should get a rid of the season and the trend.
+
+```{r, results='hide'}
+model_arima_man_cov=Arima(ts_Power_train, xreg= ts_Temp_train, order=c(5,0,0), seasonal = c(0,1,0))
+summary(model_arima_man_cov)
+```
+
+```{r}
+checkresiduals(model_arima_man_cov)
+```
+
+```{r}
+prev_arima_man_cov=forecast(model_arima_man_cov,h=frequency, xreg= ts_Temp_valid)
+cat('SARIMA manual cov :',sqrt(mean((prev_arima_man_cov$mean-ts_Power_test)^2)), '\n')
+```
+
+We get SARIMA manual cov : 5.908758. We got SARIMA auto (with covariates) : 5.908364. However, we still have significant autocorelation, especially a SMA1 in the ACF. Let's try order=c(5,0,0), seasonal = c(0,1,1) then.
+
+```{r}
+#Takes time to run
+model_arima_man_cov=Arima(ts_Power_train, xreg= ts_Temp_train, order=c(5,0,0), seasonal = c(0,1,1))
+summary(model_arima_man_cov)
+```
+
+```{r}
+model_arima_man_cov %>% residuals() %>% ggtsdisplay()
+```
+
+AIC, AICc and BIC are better. The RMSE is worst on the validation dataset but after cross validation it could be different. Some autocorelations are still significant and we stil have an SMA1 + a potentially a SAR1 now.
+
+```{r}
+prev_arima_man_cov=forecast(model_arima_man_cov,h=frequency, xreg= ts_Temp_valid)
+cat('SARIMA manual cov :',sqrt(mean((prev_arima_man_cov$mean-ts_Power_test)^2)), '\n')
+```
+
+```{r}
+model_NN_cov=nnetar(ts_Power_train,xreg=ts_Temp_train)
+```
+
+```{r}
+summary(model_NN_cov)
+```
+
+```{r}
+model_NN_cov %>% residuals() %>% ggtsdisplay()
+```
+
+Neural Network does not look better. The RMSE (NN cov : 14.97342) is not better than the best ARIMA.
+
+```{r}
+prev_NN_cov=forecast(model_NN_cov,h=frequency, xreg= ts_Temp_valid)
+cat('NN cov :',sqrt(mean((prev_NN_cov$mean-ts_Power_test)^2)), '\n')
+```
+
+Finally, the best model with covariate is the auto ARIMA with covariate (RMSE 5.908364). It is also better than the best model (after cross validation) that does not take into account the outdoor temperature.
+
+Let's forecast now the Power consumption. We previously split the Temperature dataset in train, trainvaliv, valid and test. The test part is the one where we know the future and has to be used as covariate value. Before we need to retain the best model on all the Power dataset + the covariate dataset (trainVal). Then, we will forecast by using this theoretical known future on the Temperature..
+
+```{r}
+
+model_arima_auto_cov_final=Arima(ts_Power, xreg= ts_Temp_trainValid, order=c(5,0,1), seasonal = c(0,1,0))
+summary(model_arima_auto_cov_final)
+```
+
+```{r}
+prev_arima_auto_cov_final=forecast(model_arima_auto_cov_final , h=frequency, xreg= ts_Temp_test)
+```
+
+Plot both curves.
+
+```{r}
+autoplot(ts_Temp_test)+autolayer(prev_arima_auto_cov_final)
+```
+
+```{r}
+plot(prev_arima_auto_cov_final)
+```
+
+## Exports both Forecasts
+
+```{r}
+# Extract forecast values and confidence intervals
+forecast_values <- prev_arima_auto_cov_final$mean
+lower_bound <- prev_arima_auto_cov_final$lower[, 2]  # 95% lower bound
+upper_bound <- prev_arima_auto_cov_final$upper[, 2]  # 95% upper bound
+```
+
+```{r}
+# Generate the plot
+plot(forecast_values, type = "l", col = "blue", lwd = 2, ylim = range(lower_bound, upper_bound),
+     main = "Forecasted Values of Power (kW) with outdoor Temperature", xlab = "Time", ylab = "Forecasted Values")
+
+# Add confidence intervals to the plot
+lines(lower_bound, col = "red", lty = 2)
+lines(upper_bound, col = "red", lty = 2)
+```
+
+Export the Forecast
+
+```{r, results='hide'}
+# Combine forecasted values and xreg values into a data frame
+xreg = ts_Temp_test
+export_data <- data.frame(
+  Forecast = as.numeric(forecast_values),  # Convert forecasted values to numeric
+  Xreg1 = xreg
+)
+
+# View the data frame before exporting (optional)
+print(export_data)
+```
+
+## Forecast file without covariates
+
+```{r, results='hide', results='hide'}
+prev_hw_without_cov_final<-predict(model_hw_without_cov_final,n.ahead=frequency)
+plot(prev_hw_without_cov_final, lty=2)
+
+# Extract forecast values and confidence intervals
+forecast_values_without_cov <- prev_hw_without_cov_final
+```
+
+```{r, results='hide'}
+# Combine forecasted values and xreg values into a data frame
+xreg = ts_Temp_test
+export_data <- data.frame(
+  ForecastWithout = as.numeric(forecast_values_without_cov),  # Convert forecasted values to numeric  
+  ForecastWith = as.numeric(forecast_values),  # Convert forecasted values to numeric    
+  Xreg1 = xreg
+)
+
+# View the data frame before exporting (optional)
+print(export_data)
+```
+
+```{r}
+# Export the data to a CSV file
+write.csv(export_data, "forecast_and_xreg_results.csv", row.names = FALSE)
+```
+
