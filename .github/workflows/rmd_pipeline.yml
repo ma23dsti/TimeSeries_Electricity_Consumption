@@ -29,8 +29,8 @@ jobs:
       run: |
         Rscript -e "rmarkdown::render('TimeSeries_script.rmd')"
 
-    - name: Upload HTML output (if rendering to HTML)
-      uses: actions/upload-artifact@v2
+    - name: Upload pdf output
+      uses: actions/upload-artifact@v3
       with:
         name: rmd-output
-        path: TimeSeries_script.html
+        path: TimeSeries_script.pdf
