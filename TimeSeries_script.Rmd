@@ -36,6 +36,7 @@ Load data and have a first look on them.
 library(readxl)
 library(xts)
 library(randomForest)
+library(ggplot2)
 ```
 
 ```{r}
