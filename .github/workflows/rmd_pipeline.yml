@@ -29,6 +29,10 @@ jobs:
       run: |
         Rscript -e "install.packages(c('rmarkdown', 'forecast', 'ggfortify', 'readxl', 'xts', 'randomForest'), repos='http://cran.rstudio.com/', dependencies=TRUE)"
 
+    - name: Install forecast package using remotes
+      run: |
+        script -e "if(!require('forecast')) remotes::install_cran('forecast')"     
+
     - name: Render RMarkdown document
       run: |
         Rscript -e "rmarkdown::render('TimeSeries_script.Rmd')"
