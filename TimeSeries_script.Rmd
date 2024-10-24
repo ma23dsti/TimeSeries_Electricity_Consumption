@@ -249,7 +249,7 @@ for (step in 0:(nb_iter-1)){
 f_true = window(ts_Power,start=c(2010,5+(nrow(observationsPower_train)-frequency*step)), end=c(2010,5+(nrow(observationsPower_train)-96*step)+nb_iter*frequency-1))
 
 f1=ts(forecasting_1,start=end_train,frequency = 96)
-autoplot (ts_Power, series = "ts_Power", lty=2, col=1) + autolayer (f1)
+###autoplot (ts_Power, series = "ts_Power", lty=2, col=1) + autolayer (f1)
 ```
 
 ```{r}
@@ -510,13 +510,13 @@ ts_Temp_train=ts(coredata(xts_dataTemp_train),start=c(2010,5),frequency=frequenc
 ts_Temp_valid=ts(coredata(xts_dataTemp_valid),start=c(2010,5+(nrow(observations)- frequency*2)),frequency=frequency)
 ts_Temp_test=ts(coredata(xts_dataTemp_test),start=c(2010,5+(nrow(observations)- frequency)),frequency=frequency)
 
-autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
-  autolayer (ts_Temp_trainValid, series = "ts_Temp_trainValid")+
-  autolayer (ts_Temp_valid, series = "ts_Temp_valid")
+###autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
+###  autolayer (ts_Temp_trainValid, series = "ts_Temp_trainValid")+
+###  autolayer (ts_Temp_valid, series = "ts_Temp_valid")
 
-autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
-  autolayer (ts_Temp_valid, series = "ts_Temp_valid")+
-  autolayer (ts_Temp_test, series = "ts_Temp_test")
+###autoplot (ts_Temp_test, series = "ts_Temp", lty=2)+
+###  autolayer (ts_Temp_valid, series = "ts_Temp_valid")+
+###  autolayer (ts_Temp_test, series = "ts_Temp_test")
 ```
 
 ```{r, results='hide'}
@@ -553,7 +553,7 @@ ar5 coeff is slightly significant. ma1 is significant.
 
 ```{r}
 prev=forecast(model_arima_auto_cov, h=frequency, xreg= ts_Temp_valid)
-autoplot(ts_Power_test)+autolayer(prev$mean)
+###autoplot(ts_Power_test)+autolayer(prev$mean)
 cat('SARIMA auto covariates :',sqrt(mean((prev$mean-ts_Power_test)^2)), '\n')
 ```
 
@@ -681,7 +681,7 @@ prev_arima_auto_cov_final=forecast(model_arima_auto_cov_final , h=frequency, xre
 Plot both curves.
 
 ```{r}
-autoplot(ts_Temp_test)+autolayer(prev_arima_auto_cov_final)
+###autoplot(ts_Temp_test)+autolayer(prev_arima_auto_cov_final)
 ```
 
 ```{r}
