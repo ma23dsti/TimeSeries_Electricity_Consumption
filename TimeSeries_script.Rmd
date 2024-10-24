@@ -249,7 +249,7 @@ for (step in 0:(nb_iter-1)){
 f_true = window(ts_Power,start=c(2010,5+(nrow(observationsPower_train)-frequency*step)), end=c(2010,5+(nrow(observationsPower_train)-96*step)+nb_iter*frequency-1))
 
 f1=ts(forecasting_1,start=end_train,frequency = 96)
-###autoplot (ts_Power, series = "ts_Power", lty=2, col=1) + autolayer (f1)
+autoplot (ts_Power, series = "ts_Power", lty=2) + autolayer (f1)
 ```
 
 ```{r}
