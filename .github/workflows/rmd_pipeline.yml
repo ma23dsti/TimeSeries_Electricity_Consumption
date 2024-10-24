@@ -46,9 +46,14 @@ jobs:
       run: |
         script -e "if(!require('forecast')) remotes::install_cran('forecast')"     
 
+    - name: Install TinyTeX
+      run: |
+        Rscript -e 'install.packages("tinytex")'
+        Rscript -e 'tinytex::install_tinytex()'
+
     - name: Render RMarkdown document
       run: |
-        Rscript -e "rmarkdown::render('TimeSeries_script.Rmd')"
+        Rscript -e "rmarkdown::render('TimeSeries_script.Rmd', output_format='pdf_document')"
 
     - name: Upload pdf output
       uses: actions/upload-artifact@v3
