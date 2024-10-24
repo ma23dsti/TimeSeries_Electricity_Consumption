@@ -36,7 +36,6 @@ library(forecast)
 library(readxl)
 library(xts)
 library(randomForest)
-library(ggfortify)
 library(ggplot2)
 ```
 
