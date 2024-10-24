@@ -155,8 +155,25 @@ ts_Power=ts(coredata(xts_dataPower),start=c(2010,5),frequency=frequency)
 ts_Power_train=ts(coredata(xts_dataPower_train),start=c(2010,5),frequency=frequency)
 ts_Power_test=ts(coredata(xts_dataPower_test),start=c(2010,5+(nrow(observations)- frequency*2)),frequency=frequency)
 
-autoplot (ts_Power_test, series = "ts_Power", lty=2)+
-  autolayer (ts_Power_train, series = "ts_Power_train")
+#autoplot (ts_Power_test, series = "ts_Power", lty=2)+
+#  autolayer (ts_Power_train, series = "ts_Power_train")
+```
+
+```{r}
+df_Power_test <- as.data.frame(ts_Power_test)
+df_Power_train <- as.data.frame(ts_Power_train)
+
+# Add a column for the time
+df_Power_test$Time <- time(ts_Power_test)
+df_Power_train$Time <- time(ts_Power_train)
+
+# Plot using ggplot2, adding both time series
+ggplot() +
+  geom_line(data = df_Power_test, aes(x = Time, y = ts_Power_test, color = "Test Series"), linetype = "dashed") +
+  geom_line(data = df_Power_train, aes(x = Time, y = ts_Power_train, color = "Train Series")) +
+  labs(title = "Time Series Data", x = "Time", y = "Power") +
+  scale_color_manual(values = c("Test Series" = "blue", "Train Series" = "red")) +
+  theme_minimal()
 ```
 
 Let's start to decompose the components of the Power Time Series.
